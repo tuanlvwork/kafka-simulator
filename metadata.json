@@ -1,0 +1,5 @@
+{
+  "name": "StreamWeaver: Kafka Simulator",
+  "description": "An interactive educational game to learn Apache Kafka concepts by building and scaling streaming pipelines, featuring an AI Tutor.",
+  "requestFramePermissions": []
+}
