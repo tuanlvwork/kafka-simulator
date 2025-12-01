@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { NodeEntity, NodeType } from '../types';
-import { Database, Server, User, Loader2, AlertCircle, HardDrive, X, Users, ChevronUp, ChevronDown } from 'lucide-react';
+import { Database, Server, User, Loader2, AlertCircle, HardDrive, X, Users, WifiOff, Copy } from 'lucide-react';
 
 interface NodeComponentProps {
   node: NodeEntity;
@@ -17,6 +17,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
       case NodeType.PRODUCER:
         return <Server className="w-6 h-6 text-blue-400" />;
       case NodeType.TOPIC:
+        if (node.isOffline) return <WifiOff className="w-6 h-6 text-red-500" />;
         return <Database className="w-6 h-6 text-kafka-orange" />;
       case NodeType.CONSUMER:
         return <User className={`w-6 h-6 ${node.isIdle ? 'text-gray-500' : 'text-green-400'}`} />;
@@ -28,15 +29,33 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
   const isWarning = node.type === NodeType.TOPIC && (node.currentLag || 0) > 50;
 
   let borderColor = "border-gray-600";
-  if (node.isRebalancing) borderColor = "border-yellow-400 border-dashed animate-pulse";
-  else if (isDanger) borderColor = "border-red-500 animate-pulse";
-  else if (isWarning) borderColor = "border-yellow-500";
+  let bgColor = "bg-kafka-gray";
+
+  if (node.isRebalancing) {
+    borderColor = "border-yellow-400 border-dashed animate-pulse";
+  } else if (node.isOffline) {
+    borderColor = "border-red-600";
+    bgColor = "bg-red-950/50";
+  } else if (isDanger) {
+    borderColor = "border-red-500 animate-pulse";
+  } else if (isWarning) {
+    borderColor = "border-yellow-500";
+  }
 
   const handlePartitionChange = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
     if (onUpdate && node.partitions !== undefined) {
       const newCount = Math.max(1, Math.min(6, node.partitions + delta)); // Limit between 1 and 6 for UI
       onUpdate(node.id, { partitions: newCount });
+    }
+  };
+
+  const handleReplicationChange = (e: React.MouseEvent, delta: number) => {
+    e.stopPropagation();
+    if (onUpdate && node.replicationFactor !== undefined) {
+      // Limit between 1 and 3 (max brokers)
+      const newRF = Math.max(1, Math.min(3, node.replicationFactor + delta));
+      onUpdate(node.id, { replicationFactor: newRF });
     }
   };
 
@@ -68,7 +87,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
     <div
       onMouseDown={(e) => onMouseDown && onMouseDown(e, node.id)}
       onClick={() => onClick(node.id)}
-      className={`absolute flex flex-col items-center justify-center w-36 h-36 bg-kafka-gray rounded-xl border-2 ${borderColor} shadow-lg cursor-grab active:cursor-grabbing hover:scale-105 transition-transform select-none z-10 group`}
+      className={`absolute flex flex-col items-center justify-center w-40 h-40 ${bgColor} rounded-xl border-2 ${borderColor} shadow-lg cursor-grab active:cursor-grabbing hover:scale-105 transition-transform select-none z-10 group`}
       style={{ left: node.x, top: node.y }}
     >
       {/* Delete Button (Visible on Hover) */}
@@ -91,11 +110,20 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
         </div>
       )}
 
+      {/* Offline Overlay */}
+      {node.isOffline && !node.isRebalancing && (
+        <div className="absolute inset-0 z-20 rounded-xl flex items-center justify-center bg-black/20 pointer-events-none">
+             <div className="bg-red-900/90 text-red-200 text-[10px] font-bold px-2 py-1 rounded border border-red-500 rotate-12 shadow-lg text-center">
+                ALL REPLICAS<br/>DOWN
+             </div>
+        </div>
+      )}
+
       {/* Broker Tag for Topics */}
-      {node.type === NodeType.TOPIC && node.brokerId && (
-        <div className="absolute -top-3 bg-gray-800 text-gray-400 text-[9px] px-2 py-0.5 rounded-full border border-gray-600 flex items-center gap-1">
+      {node.type === NodeType.TOPIC && node.activeLeaderId && (
+        <div className={`absolute -top-3 text-[9px] px-2 py-0.5 rounded-full border flex items-center gap-1 z-30 ${node.isOffline ? 'bg-red-900 text-red-200 border-red-500' : 'bg-gray-800 text-gray-400 border-gray-600'}`}>
             <HardDrive size={10} />
-            Broker {node.brokerId}
+            Leader: {node.activeLeaderId}
         </div>
       )}
 
@@ -115,7 +143,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
       {/* Main Icon */}
       <div className="mb-2 relative">
         {getIcon()}
-        {node.isIdle && !node.isRebalancing && (
+        {node.isIdle && !node.isRebalancing && !node.isOffline && (
           <div className="absolute -top-1 -right-1">
              <AlertCircle size={12} className="text-gray-400" fill="black" />
           </div>
@@ -126,31 +154,39 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
 
       {/* --- TOPIC SPECIFIC UI --- */}
       {node.type === NodeType.TOPIC && (
-        <div className="w-full px-2 mt-2 flex flex-col items-center" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="w-full px-2 mt-1 flex flex-col items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
           {/* Partition Bar Visualization */}
-          <div className="flex gap-0.5 w-full h-2 mb-1">
+          <div className="flex gap-0.5 w-full h-1.5">
              {Array.from({ length: node.partitions || 1 }).map((_, idx) => (
                <div key={idx} className="flex-1 bg-gray-800 rounded-sm overflow-hidden relative">
                   {/* Fill level for this partition */}
                   <div 
-                    className={`absolute bottom-0 w-full transition-all duration-300 ${isDanger ? 'bg-red-500' : 'bg-kafka-orange'}`}
+                    className={`absolute bottom-0 w-full transition-all duration-300 ${node.isOffline ? 'bg-gray-600' : isDanger ? 'bg-red-500' : 'bg-kafka-orange'}`}
                     style={{ height: `${Math.min(node.currentLag || 0, 100)}%` }}
                   />
                </div>
              ))}
           </div>
           
-          {/* Controls */}
-          <div className="flex items-center gap-2 mt-1">
-            <button 
-                onClick={(e) => handlePartitionChange(e, -1)}
-                className="w-4 h-4 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-[10px]"
-            >-</button>
-            <span className="text-[9px] text-gray-400 font-mono">Partitions: {node.partitions}</span>
-            <button 
-                onClick={(e) => handlePartitionChange(e, 1)}
-                className="w-4 h-4 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-[10px]"
-            >+</button>
+          {/* Controls Row 1: Partitions */}
+          <div className={`flex items-center justify-between w-full gap-1 ${node.isOffline ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-1 bg-gray-800/80 rounded px-1">
+              <button onClick={(e) => handlePartitionChange(e, -1)} className="text-gray-400 hover:text-white text-[10px] px-1">-</button>
+              <span className="text-[8px] text-gray-400 font-mono">Partitions: {node.partitions}</span>
+              <button onClick={(e) => handlePartitionChange(e, 1)} className="text-gray-400 hover:text-white text-[10px] px-1">+</button>
+            </div>
+          </div>
+
+          {/* Controls Row 2: Replication Factor */}
+          <div className={`flex items-center justify-between w-full gap-1 ${node.isOffline ? 'opacity-50 pointer-events-none' : ''}`}>
+             <div className="flex items-center gap-1 bg-gray-800/80 rounded px-1 w-full justify-center border border-gray-700/50" title="Replication Factor">
+                <button onClick={(e) => handleReplicationChange(e, -1)} className="text-blue-400 hover:text-white text-[10px] px-1">-</button>
+                <div className="flex items-center gap-1">
+                    <Copy size={8} className="text-blue-400"/>
+                    <span className="text-[8px] text-blue-300 font-mono">RF: {node.replicationFactor}</span>
+                </div>
+                <button onClick={(e) => handleReplicationChange(e, 1)} className="text-blue-400 hover:text-white text-[10px] px-1">+</button>
+             </div>
           </div>
         </div>
       )}

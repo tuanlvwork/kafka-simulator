@@ -1,11 +1,12 @@
 
 import React from 'react';
 import { NodeType, ClusterMode } from '../types';
-import { Plus, Play, Pause, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, ToggleLeft, ToggleRight, RotateCcw } from 'lucide-react';
 
 interface ControlPanelProps {
   onAddNode: (type: NodeType) => void;
   onReset: () => void;
+  onRetry: () => void;
   onTogglePause: () => void;
   onToggleClusterMode: () => void;
   isRunning: boolean;
@@ -16,6 +17,7 @@ interface ControlPanelProps {
 export const ControlPanel: React.FC<ControlPanelProps> = ({ 
   onAddNode, 
   onReset, 
+  onRetry,
   onTogglePause, 
   onToggleClusterMode,
   isRunning,
@@ -56,7 +58,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         
         <button
           onClick={() => onAddNode(NodeType.PRODUCER)}
-          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group"
+          disabled={gameStatus === 'GAME_OVER'}
+          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="w-8 h-8 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Plus size={16} />
@@ -69,7 +72,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <button
           onClick={() => onAddNode(NodeType.TOPIC)}
-          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group"
+          disabled={gameStatus === 'GAME_OVER'}
+          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="w-8 h-8 rounded bg-kafka-orange/20 text-kafka-orange flex items-center justify-center group-hover:scale-110 transition-transform">
              <Plus size={16} />
@@ -82,7 +86,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <button
           onClick={() => onAddNode(NodeType.CONSUMER)}
-          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group"
+          disabled={gameStatus === 'GAME_OVER'}
+          className="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-all text-sm group disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="w-8 h-8 rounded bg-green-500/20 text-green-400 flex items-center justify-center group-hover:scale-110 transition-transform">
              <Plus size={16} />
@@ -99,7 +104,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         
         <button
           onClick={onTogglePause}
-          className={`flex items-center justify-center gap-2 p-2 rounded font-bold transition-colors ${isRunning ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}
+          disabled={gameStatus === 'GAME_OVER'}
+          className={`flex items-center justify-center gap-2 p-2 rounded font-bold transition-colors ${isRunning ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-green-600 hover:bg-green-500 text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isRunning ? <><Pause size={16} /> Pause</> : <><Play size={16} /> Start</>}
         </button>
@@ -113,9 +119,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {gameStatus === 'GAME_OVER' && (
-        <div className="mt-4 p-3 bg-red-900/30 border border-red-500/50 rounded text-center">
+        <div className="mt-4 p-3 bg-red-900/30 border border-red-500/50 rounded text-center animate-in fade-in zoom-in duration-300">
           <p className="text-red-400 font-bold mb-1">SYSTEM CRASH</p>
-          <p className="text-xs text-red-300">Lag exceeded 100%.</p>
+          <p className="text-xs text-red-300 mb-3">Lag exceeded 100%.</p>
+          
+          <button 
+            onClick={onRetry}
+            className="w-full flex items-center justify-center gap-2 bg-white text-red-600 hover:bg-gray-200 font-bold py-1.5 px-3 rounded text-sm transition-colors"
+          >
+            <RotateCcw size={14} /> Try Again
+          </button>
         </div>
       )}
     </div>
