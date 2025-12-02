@@ -1,5 +1,4 @@
 
-
 export enum NodeType {
   PRODUCER = 'PRODUCER',
   TOPIC = 'TOPIC',
@@ -7,6 +6,8 @@ export enum NodeType {
 }
 
 export type ClusterMode = 'ZOOKEEPER' | 'KRAFT';
+
+export type Language = 'en' | 'vi';
 
 export interface NodeEntity {
   id: string;

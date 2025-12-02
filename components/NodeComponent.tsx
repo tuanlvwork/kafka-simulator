@@ -1,17 +1,40 @@
 
-import React from 'react';
-import { NodeEntity, NodeType } from '../types';
-import { Database, Server, User, Loader2, AlertCircle, HardDrive, X, Users, WifiOff, Copy } from 'lucide-react';
+import React, { memo } from 'react';
+import { NodeEntity, NodeType, Language } from '../types';
+import { translations } from '../translations';
+import { Database, Server, User, Loader2, AlertCircle, HardDrive, X, Users, WifiOff, Copy, Link2, ArrowRightCircle } from 'lucide-react';
 
 interface NodeComponentProps {
   node: NodeEntity;
+  lang: Language;
   onClick: (id: string) => void;
   onUpdate?: (id: string, updates: Partial<NodeEntity>) => void;
   onDelete?: (id: string) => void;
   onMouseDown?: (e: React.MouseEvent, id: string) => void;
+  
+  // Linking Props
+  onStartLink: (e: React.MouseEvent, nodeId: string) => void;
+  onCompleteLink: (e: React.MouseEvent, nodeId: string) => void;
+  isLinkingSource: boolean; // Is this node the one starting the link?
+  isLinkingTargetCandidate: boolean; // Is this node a valid target?
+  isLinkingActive: boolean; // Is linking mode currently on globally?
 }
 
-export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onUpdate, onDelete, onMouseDown }) => {
+const NodeComponentInternal: React.FC<NodeComponentProps> = ({ 
+  node, 
+  lang, 
+  onClick, 
+  onUpdate, 
+  onDelete, 
+  onMouseDown,
+  onStartLink,
+  onCompleteLink,
+  isLinkingSource,
+  isLinkingTargetCandidate,
+  isLinkingActive
+}) => {
+  const t = translations[lang].node;
+  
   const getIcon = () => {
     switch (node.type) {
       case NodeType.PRODUCER:
@@ -30,8 +53,25 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
 
   let borderColor = "border-gray-600";
   let bgColor = "bg-kafka-gray";
+  let shadow = "shadow-lg";
 
-  if (node.isRebalancing) {
+  // State: Linking Source
+  if (isLinkingSource) {
+    borderColor = "border-indigo-500 ring-4 ring-indigo-500/30";
+    bgColor = "bg-gray-800";
+  } 
+  // State: Valid Target
+  else if (isLinkingTargetCandidate) {
+    borderColor = "border-green-400 ring-4 ring-green-400/30 cursor-crosshair";
+    shadow = "shadow-green-500/20 shadow-xl";
+  } 
+  // State: Not a valid target while linking
+  else if (isLinkingActive) {
+    bgColor = "bg-gray-900";
+    borderColor = "border-gray-800";
+  }
+  // Normal States
+  else if (node.isRebalancing) {
     borderColor = "border-yellow-400 border-dashed animate-pulse";
   } else if (node.isOffline) {
     borderColor = "border-red-600";
@@ -83,17 +123,59 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
     }
   }
 
+  // --- PORTS UI ---
+  const hasOutput = node.type === NodeType.PRODUCER || node.type === NodeType.TOPIC;
+  const hasInput = node.type === NodeType.CONSUMER || node.type === NodeType.TOPIC;
+
   return (
     <div
-      onMouseDown={(e) => onMouseDown && onMouseDown(e, node.id)}
-      onClick={() => onClick(node.id)}
-      className={`absolute flex flex-col items-center justify-center w-40 h-40 ${bgColor} rounded-xl border-2 ${borderColor} shadow-lg cursor-grab active:cursor-grabbing hover:scale-105 transition-transform select-none z-10 group`}
+      onMouseDown={(e) => {
+          if (isLinkingTargetCandidate) {
+              onCompleteLink(e, node.id);
+          } else {
+              onMouseDown && onMouseDown(e, node.id);
+          }
+      }}
+      onClick={(e) => {
+          if (isLinkingTargetCandidate) {
+              e.stopPropagation();
+              onCompleteLink(e, node.id);
+          } else {
+              onClick(node.id);
+          }
+      }}
+      className={`absolute flex flex-col items-center justify-center w-40 h-40 ${bgColor} rounded-xl border-2 ${borderColor} ${shadow} transition-colors duration-200 select-none z-10 group`}
       style={{ left: node.x, top: node.y }}
     >
+      {/* --- INPUT PORT (Left) --- */}
+      {hasInput && (
+          <div 
+             className={`absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center z-20 bg-gray-900 transition-colors ${isLinkingTargetCandidate ? 'border-green-400 scale-125' : 'border-gray-600 text-gray-600'}`}
+          >
+              <ArrowRightCircle size={14} className={isLinkingTargetCandidate ? 'text-green-400' : ''}/>
+          </div>
+      )}
+
+      {/* --- OUTPUT PORT (Right) - CLICK TO START LINK --- */}
+      {hasOutput && (
+          <button
+             onMouseDown={(e) => e.stopPropagation()} // Prevent drag
+             onClick={(e) => {
+                 e.stopPropagation();
+                 onStartLink(e, node.id);
+             }}
+             className={`absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center z-20 bg-gray-900 hover:scale-110 hover:border-indigo-400 hover:text-indigo-400 transition-all cursor-pointer ${isLinkingSource ? 'border-indigo-500 text-indigo-500 scale-110' : 'border-gray-600 text-gray-500'}`}
+             title="Link to another node"
+          >
+              <Link2 size={12} />
+          </button>
+      )}
+
+
       {/* Delete Button (Visible on Hover) */}
       <button 
         onClick={handleDelete}
-        onMouseDown={(e) => e.stopPropagation()} // Prevent drag start when clicking delete
+        onMouseDown={(e) => e.stopPropagation()} 
         className="absolute -top-2 -right-2 bg-gray-800 text-gray-400 hover:text-red-500 hover:bg-white border border-gray-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-all z-30"
         title="Delete Node"
       >
@@ -105,7 +187,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
         <div className="absolute inset-0 bg-black/60 z-20 rounded-xl flex items-center justify-center backdrop-blur-sm">
           <div className="flex flex-col items-center text-yellow-400">
             <Loader2 className="animate-spin mb-1" size={20} />
-            <span className="text-[10px] font-mono">REBALANCING</span>
+            <span className="text-[10px] font-mono">{t.rebalancing}</span>
           </div>
         </div>
       )}
@@ -113,8 +195,8 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
       {/* Offline Overlay */}
       {node.isOffline && !node.isRebalancing && (
         <div className="absolute inset-0 z-20 rounded-xl flex items-center justify-center bg-black/20 pointer-events-none">
-             <div className="bg-red-900/90 text-red-200 text-[10px] font-bold px-2 py-1 rounded border border-red-500 rotate-12 shadow-lg text-center">
-                ALL REPLICAS<br/>DOWN
+             <div className="bg-red-900/90 text-red-200 text-[10px] font-bold px-2 py-1 rounded border border-red-500 rotate-12 shadow-lg text-center whitespace-pre-line">
+                {t.allReplicasDown}
              </div>
         </div>
       )}
@@ -123,7 +205,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
       {node.type === NodeType.TOPIC && node.activeLeaderId && (
         <div className={`absolute -top-3 text-[9px] px-2 py-0.5 rounded-full border flex items-center gap-1 z-30 ${node.isOffline ? 'bg-red-900 text-red-200 border-red-500' : 'bg-gray-800 text-gray-400 border-gray-600'}`}>
             <HardDrive size={10} />
-            Leader: {node.activeLeaderId}
+            {t.leader}: {node.activeLeaderId}
         </div>
       )}
 
@@ -135,13 +217,13 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
             
             {/* Tooltip for Consumer Group */}
             <div className="absolute bottom-full mb-2 w-48 bg-gray-900 text-gray-300 text-[10px] p-2 rounded border border-gray-700 opacity-0 group-hover/cg:opacity-100 pointer-events-none transition-opacity left-1/2 -translate-x-1/2 text-center shadow-xl">
-               Consumers in the same group share the workload (Partitions) of a Topic.
+               {t.cgTooltip}
             </div>
         </div>
       )}
 
       {/* Main Icon */}
-      <div className="mb-2 relative">
+      <div className={`mb-2 relative transition-opacity ${isLinkingActive && !isLinkingTargetCandidate && !isLinkingSource ? 'opacity-30' : 'opacity-100'}`}>
         {getIcon()}
         {node.isIdle && !node.isRebalancing && !node.isOffline && (
           <div className="absolute -top-1 -right-1">
@@ -150,11 +232,13 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
         )}
       </div>
 
-      <span className="text-xs font-mono font-bold text-gray-300 pointer-events-none text-center px-1 truncate w-full">{node.name}</span>
+      <span className={`text-xs font-mono font-bold text-gray-300 pointer-events-none text-center px-1 truncate w-full transition-opacity ${isLinkingActive && !isLinkingTargetCandidate && !isLinkingSource ? 'opacity-30' : 'opacity-100'}`}>
+          {node.name}
+      </span>
 
       {/* --- TOPIC SPECIFIC UI --- */}
       {node.type === NodeType.TOPIC && (
-        <div className="w-full px-2 mt-1 flex flex-col items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`w-full px-2 mt-1 flex flex-col items-center gap-1 transition-opacity ${isLinkingActive && !isLinkingTargetCandidate && !isLinkingSource ? 'opacity-20 pointer-events-none' : 'opacity-100'}`} onMouseDown={(e) => e.stopPropagation()}>
           {/* Partition Bar Visualization */}
           <div className="flex gap-0.5 w-full h-1.5">
              {Array.from({ length: node.partitions || 1 }).map((_, idx) => (
@@ -172,7 +256,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
           <div className={`flex items-center justify-between w-full gap-1 ${node.isOffline ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex items-center gap-1 bg-gray-800/80 rounded px-1">
               <button onClick={(e) => handlePartitionChange(e, -1)} className="text-gray-400 hover:text-white text-[10px] px-1">-</button>
-              <span className="text-[8px] text-gray-400 font-mono">Partitions: {node.partitions}</span>
+              <span className="text-[8px] text-gray-400 font-mono">{t.partitions}: {node.partitions}</span>
               <button onClick={(e) => handlePartitionChange(e, 1)} className="text-gray-400 hover:text-white text-[10px] px-1">+</button>
             </div>
           </div>
@@ -183,7 +267,7 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
                 <button onClick={(e) => handleReplicationChange(e, -1)} className="text-blue-400 hover:text-white text-[10px] px-1">-</button>
                 <div className="flex items-center gap-1">
                     <Copy size={8} className="text-blue-400"/>
-                    <span className="text-[8px] text-blue-300 font-mono">RF: {node.replicationFactor}</span>
+                    <span className="text-[8px] text-blue-300 font-mono">{t.rf}: {node.replicationFactor}</span>
                 </div>
                 <button onClick={(e) => handleReplicationChange(e, 1)} className="text-blue-400 hover:text-white text-[10px] px-1">+</button>
              </div>
@@ -193,11 +277,11 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
 
       {/* --- PRODUCER SPECIFIC UI --- */}
       {node.type === NodeType.PRODUCER && (
-        <div className="flex items-center gap-1 mt-2 bg-gray-800/80 rounded border border-gray-700 px-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`flex items-center gap-1 mt-2 bg-gray-800/80 rounded border border-gray-700 px-1 transition-opacity ${isLinkingActive && !isLinkingTargetCandidate && !isLinkingSource ? 'opacity-20 pointer-events-none' : 'opacity-100'}`} onMouseDown={(e) => e.stopPropagation()}>
            <button onClick={(e) => handleRateChange(e, 'production', -1)} className="text-gray-400 hover:text-white px-1.5 hover:bg-gray-700 rounded">-</button>
            <div className="flex flex-col items-center w-10">
                <span className="text-[10px] text-blue-300 font-mono font-bold">{node.productionRate}</span>
-               <span className="text-[7px] text-gray-500 uppercase">msg/s</span>
+               <span className="text-[7px] text-gray-500 uppercase">{t.msgSec}</span>
            </div>
            <button onClick={(e) => handleRateChange(e, 'production', 1)} className="text-gray-400 hover:text-white px-1.5 hover:bg-gray-700 rounded">+</button>
         </div>
@@ -205,19 +289,19 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
 
       {/* --- CONSUMER SPECIFIC UI --- */}
       {node.type === NodeType.CONSUMER && (
-        <div className="flex flex-col items-center mt-1 w-full px-1">
+        <div className={`flex flex-col items-center mt-1 w-full px-1 transition-opacity ${isLinkingActive && !isLinkingTargetCandidate && !isLinkingSource ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
           {/* Processing Rate Control */}
           <div className="flex items-center gap-1 mb-1 bg-gray-800/80 rounded border border-gray-700 px-1" onMouseDown={(e) => e.stopPropagation()}>
              <button onClick={(e) => handleRateChange(e, 'processing', -1)} className="text-gray-400 hover:text-white px-1.5 hover:bg-gray-700 rounded">-</button>
              <div className="flex flex-col items-center w-10">
                <span className="text-[10px] text-green-300 font-mono font-bold">{node.processingRate}</span>
-               <span className="text-[7px] text-gray-500 uppercase">msg/s</span>
+               <span className="text-[7px] text-gray-500 uppercase">{t.msgSec}</span>
              </div>
              <button onClick={(e) => handleRateChange(e, 'processing', 1)} className="text-gray-400 hover:text-white px-1.5 hover:bg-gray-700 rounded">+</button>
           </div>
 
           {node.isIdle ? (
-             <span className="text-[9px] text-gray-500 bg-gray-800 px-1 rounded">IDLE (No Partitions)</span>
+             <span className="text-[9px] text-gray-500 bg-gray-800 px-1 rounded">{t.idle}</span>
           ) : (
             <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
               {node.assignedPartitions?.map(p => (
@@ -232,3 +316,5 @@ export const NodeComponent: React.FC<NodeComponentProps> = ({ node, onClick, onU
     </div>
   );
 };
+
+export const NodeComponent = memo(NodeComponentInternal);
